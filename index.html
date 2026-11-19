@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CTLX</title>
+<meta name="description" content="CTLX: quantitative decision-making for private deals.">
+<style>
+  :root {
+    --paper:#ffffff; --ink:#1A1A1A; --muted:#555555; --faint:#777777;
+    --burgundy:#C1272D; --burgundy-ink:#A01F25; --gold:#D4961F; --hairline:#E0E0E0; --band:#F5F5F5;
+  }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { background:var(--paper); color:var(--ink); font-family:Arial, Helvetica, sans-serif;
+         font-size:16px; line-height:1.65; }
+  header { background:var(--burgundy); color:#fff; }
+  .wrap { max-width:960px; margin:0 auto; padding:0 24px; }
+  header .wrap { display:flex; justify-content:space-between; align-items:center; height:72px; }
+  .mark { display:flex; flex-direction:column; align-items:center; line-height:1; font-weight:700; }
+  .mark .x { font-size:20px; }
+  .mark .name { font-size:15px; font-weight:600; letter-spacing:6px; margin-top:6px; padding-left:6px; }
+  header a { color:#fff; text-decoration:none; font-size:13px; letter-spacing:.12em; text-transform:uppercase; }
+  .hero { padding:96px 0 72px; }
+  .eyebrow { color:var(--burgundy-ink); font-size:13px; font-weight:600; letter-spacing:.18em; text-transform:uppercase; }
+  h1 { font-family:Arial, Helvetica, sans-serif; font-weight:700; font-size:clamp(32px, 4.6vw, 48px); letter-spacing:-.01em;
+       line-height:1.15; margin-top:20px; max-width:780px; }
+  .divider { width:120px; height:4px; background:var(--gold); margin:32px 0; }
+  .lead { font-size:18px; max-width:680px; color:var(--ink); }
+  .lines { border-top:3px solid var(--burgundy); display:grid; grid-template-columns:repeat(3, 1fr); }
+  .line { padding:40px 32px 48px 0; }
+  .line + .line { padding-left:32px; border-left:1px solid var(--hairline); }
+  .line h2 { font-family:Arial, Helvetica, sans-serif; font-weight:700; font-size:20px; color:var(--burgundy-ink); margin-bottom:12px; }
+  .line p { color:var(--muted); font-size:15px; }
+  .contact { background:var(--band); padding:56px 0; }
+  .contact h2 { font-family:Arial, Helvetica, sans-serif; font-weight:700; font-size:28px; }
+  .contact a { color:var(--burgundy-ink); font-weight:600; text-decoration:none; border-bottom:1px solid var(--burgundy); }
+  .contact p { margin-top:12px; }
+  footer { padding:24px 0 32px; color:var(--faint); font-size:12px; }
+  @media (max-width:720px) {
+    .hero { padding:64px 0 48px; }
+    .lines { grid-template-columns:1fr; }
+    .line, .line + .line { padding:32px 0; border-left:0; }
+    .line + .line { border-top:1px solid var(--hairline); }
+  }
+</style>
+</head>
+<body>
+<header><div class="wrap"><span class="mark" aria-label="CTLX"><span class="x">X</span><span class="name">CTLX</span></span><a href="mailto:ali@ctlx.holdings">Contact</a></div></header>
+<main>
+  <section class="hero"><div class="wrap">
+    <p class="eyebrow">Investment analysis and financial modelling</p>
+    <h1>Quantitative decision-making for private deals</h1>
+    <div class="divider"></div>
+    <p class="lead">Private deals are decided on thin, unaudited data. We turn that data into numbers a decision can rest on: what the business is worth, what can go wrong and how likely it is, and which facts would change the answer.</p>
+  </div></section>
+  <section class="wrap"><div class="lines">
+    <div class="line"><h2>Acquisitions</h2><p>Valuation, downside cases and the plan after closing, for buyers of established businesses.</p></div>
+    <div class="line"><h2>Founder plans</h2><p>Business plans and financial models that hold up in front of investors and lenders.</p></div>
+    <div class="line"><h2>Project finance</h2><p>Cash-flow models and funding cases for energy and infrastructure projects.</p></div>
+  </div></section>
+  <section class="contact"><div class="wrap">
+    <h2>Contact</h2>
+    <p><a href="mailto:ali@ctlx.holdings">ali@ctlx.holdings</a></p>
+  </div></section>
+</main>
+<footer><div class="wrap">&copy; 2026 CTLX</div></footer>
+</body>
+</html>
