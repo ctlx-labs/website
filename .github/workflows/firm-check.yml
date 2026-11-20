@@ -1,0 +1,21 @@
+# Stamped from ctlxholdings/claude settings/firm/ci/. Runs the firm check on every pull request.
+# It blocks merging once branch protection requires it (GitHub Pro or Team).
+name: firm-check
+# Runs on pull requests only: main changes only by PR (ruleset), so a second run on merge repeats the same check.
+# A newer push to the same PR cancels the older run. Both save Actions minutes (billed per started minute).
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited]  # edited: rule 7 reads the PR body
+concurrency:
+  group: firm-check-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+jobs:
+  firm-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: python3 .claude/checks/firm_check.py --base origin/${{ github.base_ref || 'main' }}

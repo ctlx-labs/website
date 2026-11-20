@@ -1,0 +1,18 @@
+{
+  "_doc": "Core-asset register, machine part. Human part: ctlx-labs/firm catalog/CORE-ASSETS.md. A pull request that adds a file matching an asset's patterns, in a repository that is not the asset's home and has no recorded exception, gets a warning (not a failure).",
+  "assets": [
+    {"id": 1, "name": "document assembly with figure tie-out", "home": ["myralphloop"],
+     "patterns": ["*judge*.py", "*tie_out*.py", "*tieout*.py", "*render*.py", "*check_doc*.py"]},
+    {"id": 2, "name": "assumptions register", "home": ["one-engine"],
+     "patterns": ["*assumption*.py", "*assumption*.yaml", "*assumption*.csv", "*source_grade*"]},
+    {"id": 3, "name": "calculation engine (ledger, kernel)", "home": ["one-engine"],
+     "patterns": ["*ledger*.py", "*kernel*.py", "engine/*.py", "engine_v*/*.py", "*/engine/*.py"]},
+    {"id": 6, "name": "investment policy as configuration", "home": [],
+     "patterns": ["*policy*.yaml", "*hurdle*", "*mandate*.yaml"]}
+  ],
+  "exceptions": [
+    {"repo": "baghara", "asset": 3, "until": "golden master passes"},
+    {"repo": "01-averta", "asset": 3, "until": "golden master passes"},
+    {"repo": "explorer-baghara", "asset": 3, "until": "golden master passes"}
+  ]
+}

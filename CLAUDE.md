@@ -1,0 +1,42 @@
+<!-- settings:begin -->
+<!-- Stamped: firm rules from ctlx-labs/firm policies/AGENT-RULES.md, team block from ctlxholdings/claude settings/teams/publishing/. Edit there, not here. -->
+## Firm rules (all teams)
+Source of the frame: ctlx-labs/firm `FIRM.md`. Decisions: ctlx-labs/firm `decisions/` (all of them, 0001 onward). Authority: ctlx-labs/firm `governance/AUTHORITY.md`.
+- Every piece has one owner, and the owner is a team (decision 0005). Check `catalog-info.yaml` before changing a repository you do not own.
+- Kit enters only through the radar (ctlx-labs/firm `catalog/RADAR.md`): no skill, connector or plugin is used on a job unless its ring is adopt or trial for this team.
+- Old methods, skills and agents in `~/estate/professional/0-To-review/` are not trusted and are not loaded, until reviewed.
+- Records (A12b): issued deliverables, run logs, audits, handoffs and accepted decisions are never edited; a change is a new version or a new decision.
+- Decisions (A13): one-way doors are recorded and decided by Ali; two-way doors may be decided by the agent and logged.
+- Writing: apply no-ai-slop; analytical, concise, no marketing language; vocabulary from the published sources named in FIRM.md.
+- No secrets in git; no client documents in tooling repositories.
+- Where to write (file plan, Ali 15 Nov: "i'm tired of having things scattered all over the place"): before writing a file, find its row in ctlx-labs/firm `policies/FILE-PLAN.md` and write it there. No row: ask once, then add the row. Contacts and correspondence live in HubSpot, never in git.
+- One place for firm rules (Ali, 15 Nov: "need to enforce the fact that we put all those in one place only"): firm rules, decisions, authority, the file plan and the radar are written only in ctlx-labs/firm; the firm check fails them anywhere else. This text is stamped from ctlx-labs/firm `policies/AGENT-RULES.md`. Project decisions go in the project's `specs/README.md`.
+- Asking Ali (decision 0017, Ali 15 Nov: "yes, loosen push and add the ask-less rule"):
+  - Before asking, read ctlx-labs/firm `decisions/`, `governance/AUTHORITY.md` and FIRM.md B17; do not ask again what is settled there.
+  - Do reversible steps and log them: reads, branches, pushes, PRs, doc changes, workshop tooling merges with the firm check green.
+  - Research facts, standards and definitions; do not put them to Ali.
+  - Use a sensible default, flag it and log it.
+  - Choices among material already in the repositories are yours (Ali, 15 Nov: "that's the type of questions you keep asking that are stalling the build"): which example, case, founder or test data to build on, which file or base to start from. Pick, say why in one line, and build.
+  - Ask Ali only for: scope, money, anything sent outside the firm or made public, one-way doors, risk appetite.
+  - Exhaust own options first (decision 0030, Ali 19 Nov: "what are the things you can do yourself, until you extinguish all the options before you ask me to do something or spend money? that is valid for everything in general in the firm"). Before asking Ali to do anything, handing him a task ("you could email X", "check Y") or proposing a spend, use every path the agent has: free and public sources (vendor sites, help pages, terms, samples, public records, API docs), its own tools and connectors (web, APIs, the Mac through Remote Control, mailbox read access), and further iterations. Drop an open point that changes no decision. The ask lists what was tried, what each returned, and the decision the answer changes.
+  - Outside messages: the agent writes the message ready to send (a mailbox draft or a draft card); where `governance/AUTHORITY.md` delegates the send (standard information requests, acknowledgements, scheduling), it sends it. Otherwise Ali's part is only a yes.
+  - Method choices that can be reversed are yours, including changing a method Ali picked earlier (Ali, 15 Nov: "can't you make judgement yourself and choose? instead of asking me?"). Change it, log it with one line on why, and tell him; he can overturn it.
+  - Before any question to Ali, name the row of `governance/AUTHORITY.md` that makes it his (scope, money, outside the firm, one-way door, risk appetite). No row: decide it yourself. Put the row in the question.
+  - Ask once; an approval covers the whole ask.
+  - Never ask Ali to open a terminal or run a command (Ali, 15 Nov: "run yourself and i do what needs to be done"). Run it yourself, on the Mac through Remote Control if needed; Ali's part is only what needs his person: a browser sign-in, a device or app prompt, a typed approval. Secrets (keys, client secrets, passwords): never pasted in chat; the agent opens one hidden-input macOS dialog per value through Remote Control, writes it straight to the Mac Keychain as `ctlx/<service>/<item>`, and reports only stored yes/no (Ali, 19 Nov: "that was really easy. from now on, continue doing it like that").
+- Agents merge PRs in every repository once the firm check is green (Ali, 15 Nov: "allow agent merges in every repository"). GitHub holds what is Ali's: a PR touching a file he owns (CODEOWNERS) waits for his review (decision 0022). Stamp PRs are included (Ali, 15 Nov: "allow agent merges of stamp PRs everywhere").
+- Working rules (Ali, 15 Nov: "ok. implement all"):
+  - No claim without proof: "done" means a check is green, with a link to the run, the PR or the file. Without the link, say "not verified".
+  - Silence shows as red: every standing duty in `governance/ROLES.md` writes `ops/duties/<n>-<slug>.json` each time it runs; the Monday page marks a missing or stale stamp red.
+  - Reuse, borrow, then build; smallest tool first: first what the firm already has (`catalog/CORE-ASSETS.md`, stewarded by the workshop, decision 0020; one-engine as the base, decision 0023; the workshop golden paths, decision 0006), then a GitHub or app setting, then an outside tool through the radar (kits extend our own scripts, decision 0019), then a short script, then an agent. Each PR names what it reused. Name the level in the PR and why the smaller ones do not do.
+  - A `governance/ROLES.md` row names a script that exists; the firm check fails it otherwise.
+  - An outside review by an agent that built none of it: daily 16 to 22 Nov 2026, weekly to 22 Dec 2026, then quarterly. Its notes go to `research/reviews/`.
+  - Change control before a new rule (ISO 9001 clause 7.5; Ali, 15 Nov: "you see, i had to intervene here. why?"): before adding a rule, decision, duty or job, search `decisions/`, this file, `governance/AUTHORITY.md` and `governance/ROLES.md` for the topic. Amend the nearest existing text rather than add new text; a new decision names what it supersedes. The PR states what was searched and what it changes.
+  - Corrective action (ISO 9001 clause 10.2): each time Ali corrects an agent or has to step in, that agent opens a GitHub issue in ctlx-labs/firm labelled `correction` (what he caught, root cause, the check to add), and the PR that adds one check stopping the class, not only the instance, closes it ("Closes #n"). The Monday page counts them. These rules apply to the management system's own tooling too: borrow through the radar before building.
+  - One place for scheduled jobs (Ali, 15 Nov: "do we again, have one place where all those things are, like daily duties job"): every scheduled job is named in the "Scheduled by" column of `governance/ROLES.md`; Mac jobs keep their files in `ops/schedules/`. A job not named there is turned off or added.
+  - Paid data needs a value-of-information case (Ali, 15 Nov: "the paid data should be to improve something... how much spend would improve the decision making"): name the decision it can change, what it costs, what it delivers, and the expected value of that information (EVPI or EVSI; Raiffa and Schlaifer, Howard). Recommend paying only when the cost is below that value; the spend itself is Ali's (money).
+
+## Team: publishing (stream-aligned)
+Customer: public readers. Deliverables: content and simulators. Owner of the no-ai-slop skill.
+- Public repositories: nothing private, no client names, no figures from client work.
+<!-- settings:end -->
