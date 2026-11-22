@@ -1,0 +1,5 @@
+# GitHub Pages (Jekyll) build settings. Keeps repository files off ctlx.holdings.
+exclude:
+  - CLAUDE.md
+  - catalog-info.yaml
+  - README.md
