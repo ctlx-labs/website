@@ -1,0 +1,4 @@
+# GitHub Pages (Jekyll) build settings. Keeps agent and catalogue files off ctlx.holdings.
+exclude:
+  - CLAUDE.md
+  - catalog-info.yaml

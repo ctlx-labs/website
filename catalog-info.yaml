@@ -1,0 +1,13 @@
+# Software catalogue record (Backstage format, backstage.io/docs/features/software-catalog/descriptor-format).
+# GitHub topics mirror this file: website, system-free-content, domain-publishing.
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: website
+  description: "Public website for ctlx.holdings, served by GitHub Pages."
+  tags: [website]
+spec:
+  type: website
+  lifecycle: production
+  owner: group:publishing
+  system: free-content
