@@ -14,9 +14,21 @@ Fails when:
 7. The pull request body hands Ali a task the agent could do itself ("one email would settle it", "you could ask
    them") on a line that does not list what was tried ("Tried:"). Text inside double quotes is a quotation and is
    skipped. Decision 0030 (Ali, 19 Nov: "until you extinguish all the options before you ask me"); correction #128.
+8. Outside ctlx-labs/one-engine, the branch adds a financial calculation function (irr, npv, xirr, xnpv, dscr, llcr,
+   pmt, annuity, waterfall, payback) in Python, JavaScript or TypeScript. Figures used for decisions or sent out come
+   from golden-tested one-engine code (decision 0035): call one-engine instead. Test files and the allow-listed
+   teaching code (FINANCE_ALLOWED) are skipped. Existing definitions are not flagged; only added lines are read.
+9. catalog-info.yaml gives `ctlx-labs/kind` or `ctlx-labs/unit` (metadata.annotations) a value outside the lists:
+   kind machine | work | records (decision 0029, FIRM.md B17 iteration 4); unit line:<name> | core-assets | workshop |
+   management-system | office (decision 0025). A `records` repository whose branch edits or deletes an existing
+   file also fails (A12b: a record is never edited; a change is a new dated file).
 Warns (does not fail) when:
 4. The branch adds a file that looks like a new copy of a core asset, outside the asset's home and with no recorded
    exception (.claude/core-assets.json; ctlx-labs/firm catalog/CORE-ASSETS.md; FIRM.md B17).
+10. catalog-info.yaml has no `ctlx-labs/kind` or no `ctlx-labs/unit` (rollout: a warning until every repository
+    carries both, register in ctlx-labs/firm catalog/KINDS.md; then it moves to rule 9). A `work` repository whose
+    branch adds code (.py, .js, .ts, .R, .jl, .ipynb) outside .claude/ and .github/: a work repository holds inputs
+    and configuration that a machine reads, not calculations of its own (B17 iteration 4, rule 2).
 
     python3 .claude/checks/firm_check.py [--base origin/main]
 Stamped from ctlxholdings/claude settings/firm/checks/.
@@ -141,6 +153,117 @@ def check_one_place(base: str) -> list[str]:
             "specs/README.md." for n in added if FIRM_RULE_FILES.search(n)]
 
 
+FINANCE_DEF = re.compile(
+    r"^\+\s*(?:export\s+)?(?:async\s+)?(?:def|function|const|let|var)\s+_*(?:calc(?:ulate)?_?)?"
+    r"(irr|npv|xirr|xnpv|dscr|llcr|pmt|annuity|waterfall|payback)\b", re.IGNORECASE)
+FINANCE_EXT = (".py", ".js", ".jsx", ".ts", ".tsx", ".mjs")
+# Teaching code and the workshop's own golden case (decision 0035; register rows 14, 15, 17-19).
+FINANCE_ALLOWED = {
+    "one-engine": ["*"],
+    "stochastic-course-app": ["*"],
+    "risk-return-simulator": ["*"],
+    "chad-2030-simulator": ["*"],
+    "myralphloop": ["projects/returns-model/*", "examples/loan-demo/*"],
+}
+
+
+def is_test_path(path: str) -> bool:
+    parts = path.lower().split("/")
+    name = parts[-1]
+    return (any(p in ("test", "tests", "__tests__", "spec") for p in parts[:-1]) or name.startswith("test_")
+            or re.search(r"(_test\.py|\.(test|spec)\.[jt]sx?)$", name) is not None)
+
+
+def finance_defs(diff: str, repo: str) -> list[str]:
+    allowed = FINANCE_ALLOWED.get(repo, [])
+    out, path = [], ""
+    for line in diff.splitlines():
+        if line.startswith("+++ "):
+            path = line[6:] if line.startswith("+++ b/") else ""
+            continue
+        if not path or not path.endswith(FINANCE_EXT) or is_test_path(path):
+            continue
+        if any(fnmatch.fnmatch(path, a) for a in allowed):
+            continue
+        m = FINANCE_DEF.match(line)
+        if m:
+            out.append(f"{path}: adds a {m.group(1).lower()} function. Financial calculation runs on one-engine "
+                       "(decision 0035): call one_engine.measures or the pack that has it, or extend one-engine "
+                       "through its own intake.")
+    return out
+
+
+def check_finance(base: str) -> list[str]:
+    try:
+        diff = subprocess.run(["git", "diff", "-U0", "--diff-filter=AM", f"{base}...HEAD"], cwd=ROOT,
+                              capture_output=True, text=True, check=True).stdout
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return []
+    return finance_defs(diff, repo_name())
+
+
+KINDS = ("machine", "work", "records")
+UNITS = re.compile(r"^(line:[a-z0-9][a-z0-9-]*|core-assets|workshop|management-system|office)$")
+CODE_EXT = (".py", ".js", ".jsx", ".ts", ".tsx", ".mjs", ".r", ".jl", ".ipynb")
+
+
+def catalog_fields(text: str) -> dict[str, str]:
+    """ctlx-labs/* annotations of the first catalogue document (the Component)."""
+    first = text.split("\n---")[0]
+    return {k: v.strip().strip("'\"") for k, v in
+            re.findall(r"^\s+ctlx-labs/(kind|unit):\s*(\S+)", first, re.MULTILINE)}
+
+
+def kind_problems(fields: dict[str, str]) -> tuple[list[str], list[str]]:
+    fails, warns = [], []
+    kind, unit = fields.get("kind"), fields.get("unit")
+    if kind is None:
+        warns.append("catalog-info.yaml has no ctlx-labs/kind annotation (machine | work | records; decision 0029).")
+    elif kind not in KINDS:
+        fails.append(f"catalog-info.yaml ctlx-labs/kind is '{kind}': use machine, work or records (decision 0029).")
+    if unit is None:
+        warns.append("catalog-info.yaml has no ctlx-labs/unit annotation (line:<name> | core-assets | workshop | "
+                     "management-system | office; decision 0025).")
+    elif not UNITS.match(unit):
+        fails.append(f"catalog-info.yaml ctlx-labs/unit is '{unit}': use line:<name>, core-assets, workshop, "
+                     "management-system or office (decision 0025).")
+    return fails, warns
+
+
+def kind_diff_problems(kind: str | None, status_lines: list[str]) -> tuple[list[str], list[str]]:
+    """status_lines: `git diff --name-status` rows (A/M/D/Rnn, tab, path)."""
+    fails, warns = [], []
+    for row in status_lines:
+        parts = row.split("\t")
+        if len(parts) < 2:
+            continue
+        st, path = parts[0][:1], parts[-1]
+        if path.startswith((".claude/", ".github/")) or path in ("catalog-info.yaml", "CLAUDE.md"):
+            continue  # stamped settings and the catalogue record itself
+        if kind == "records" and st in ("M", "D", "R"):
+            fails.append(f"{parts[1]}: edited or removed in a records repository. A record is never edited; add a "
+                         "new dated version (A12b).")
+        if kind == "work" and st == "A" and path.lower().endswith(CODE_EXT):
+            warns.append(f"{path}: code added to a work repository. Calculations belong in a machine that reads this "
+                         "repository's inputs (B17 iteration 4, rule 2).")
+    return fails, warns
+
+
+def check_kind(base: str) -> tuple[list[str], list[str]]:
+    f = ROOT / "catalog-info.yaml"
+    if not f.exists():
+        return [], []  # rule 1 already fails it
+    fields = catalog_fields(f.read_text())
+    fails, warns = kind_problems(fields)
+    try:
+        rows = subprocess.run(["git", "diff", "--name-status", f"{base}...HEAD"], cwd=ROOT,
+                              capture_output=True, text=True, check=True).stdout.splitlines()
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        rows = []
+    f2, w2 = kind_diff_problems(fields.get("kind"), rows)
+    return fails + f2, warns + w2
+
+
 def check_roles() -> list[str]:
     f = ROOT / "governance" / "ROLES.md"
     if not f.exists():
@@ -195,11 +318,34 @@ def main(argv: list[str]) -> int:
                 "You could email them. Tried: help pages, terms, sample report; none name the filing date."]
         assert all(find_handoffs(t) for t in bad), [t for t in bad if not find_handoffs(t)]
         assert not any(find_handoffs(t) for t in good), [t for t in good if find_handoffs(t)]
+        diff = ("+++ b/engine/returns.py\n+def irr(flows):\n+def _npv(r, flows):\n+    x = irr(f)\n"
+                "+++ b/src/model.js\n+export function calculateIRR(cf) {\n+const dscr = (a, b) => a / b;\n"
+                "+++ b/engine/tests/test_returns.py\n+def irr(flows):\n"
+                "+++ b/projects/returns-model/src/returns/irr.py\n+def irr(flows):\n"
+                "+++ b/README.md\n+def irr(flows):\n")
+        hits = finance_defs(diff, "myralphloop")
+        assert len(hits) == 4, hits
+        assert not finance_defs(diff, "one-engine")
+        cat = ("apiVersion: backstage.io/v1alpha1\nkind: Component\nmetadata:\n  name: x\n  annotations:\n"
+               "    ctlx-labs/kind: work\n    ctlx-labs/unit: line:investing\nspec:\n  type: data\n---\n"
+               "kind: System\nmetadata:\n  annotations:\n    ctlx-labs/kind: bogus\n")
+        assert catalog_fields(cat) == {"kind": "work", "unit": "line:investing"}, catalog_fields(cat)
+        assert kind_problems(catalog_fields(cat)) == ([], [])
+        assert len(kind_problems({})[1]) == 2 and not kind_problems({})[0]
+        assert len(kind_problems({"kind": "tooling", "unit": "deals"})[0]) == 2
+        assert not kind_problems({"kind": "records", "unit": "management-system"})[0]
+        rows = ["M\tissued/memo.md", "A\tissued/memo-v2.md", "M\t.claude/checks/firm_check.py", "D\told.md",
+                "A\tmodel/calc.py", "A\tinputs/case.yaml", "A\t.github/x.py"]
+        assert len(kind_diff_problems("records", rows)[0]) == 2
+        assert len(kind_diff_problems("work", rows)[1]) == 1 and not kind_diff_problems("work", rows)[0]
+        assert kind_diff_problems("machine", rows) == ([], [])
         print("Self-test passed.")
         return 0
     base = argv[argv.index("--base") + 1] if "--base" in argv else "origin/main"
-    problems = check_owner() + check_decisions(base) + check_kit() + check_one_place(base) + check_roles() + check_handoff()
-    for w in check_core_assets(base):
+    kind_fails, kind_warns = check_kind(base)
+    problems = (check_owner() + check_decisions(base) + check_kit() + check_one_place(base) + check_finance(base)
+                + kind_fails + check_roles() + check_handoff())
+    for w in check_core_assets(base) + kind_warns:
         print(f"::warning::{w}")
         print(f"Warning: {w}")
     if problems:
