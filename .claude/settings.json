@@ -34,6 +34,27 @@
             "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/protect_records.py\""
           }
         ]
+      },
+      {
+        "matcher": "mcp__hearthbot__post_message|mcp__hearthbot__request_decision|mcp__slackbot__post_message|mcp__slackbot__reply",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/agent_rules.py\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/agent_rules.py\"",
+            "timeout": 10
+          }
+        ]
       }
     ]
   }
