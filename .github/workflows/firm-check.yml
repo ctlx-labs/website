@@ -19,3 +19,5 @@ jobs:
       - env:
           PR_BODY: ${{ github.event.pull_request.body }}
         run: python3 .claude/checks/firm_check.py --base origin/${{ github.base_ref || 'main' }}
+      - name: Hook self-test (agent_rules.py)
+        run: "[ ! -f .claude/hooks/agent_rules.py ] || python3 .claude/hooks/agent_rules.py --self-test"

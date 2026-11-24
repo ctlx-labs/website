@@ -22,6 +22,9 @@ Fails when:
    kind machine | work | records (decision 0029, FIRM.md B17 iteration 4); unit line:<name> | core-assets | workshop |
    management-system | office (decision 0025). A `records` repository whose branch edits or deletes an existing
    file also fails (A12b: a record is never edited; a change is a new dated file).
+11. The repository has specs/README.md without an "Oracle: outside <reference>" or "Oracle: graded <file>" line
+    ("Oracle: built" alone fails). Same wording as gate 1.6e in ctlx-labs/myralphloop check_process.py, enforced by
+    loop.sh since 19 Nov; this extends it to builds outside myralphloop (review 24 Nov, ctlx-labs/firm PR #188).
 Warns (does not fail) when:
 4. The branch adds a file that looks like a new copy of a core asset, outside the asset's home and with no recorded
    exception (.claude/core-assets.json; ctlx-labs/firm catalog/CORE-ASSETS.md; FIRM.md B17).
@@ -310,6 +313,25 @@ def check_handoff() -> list[str]:
             "'Tried: <what was tried and what it returned>'." for l in find_handoffs(body)]
 
 
+ORACLE = re.compile(r"(?mi)^Oracle:[ \t]*(outside|graded|built)\b[ \t]*(.*)$")
+
+
+def oracle_problem(readme: str) -> str | None:
+    m = ORACLE.search(readme)
+    if m and m.group(1).lower() != "built" and m.group(2).strip():
+        return None
+    return ("specs/README.md needs 'Oracle: outside <reference>' or 'Oracle: graded <file of the person's grades>'; "
+            "'Oracle: built' alone fails: build the check first, then the product (myralphloop gate 1.6e).")
+
+
+def check_oracle() -> list[str]:
+    readme = ROOT / "specs" / "README.md"
+    if not readme.exists():
+        return []
+    p = oracle_problem(readme.read_text(errors="ignore"))
+    return [p] if p else []
+
+
 def main(argv: list[str]) -> int:
     if "--self-test" in argv:
         bad = ["One email to eInforma would settle it.", "You could ask them for the filing.",
@@ -339,12 +361,15 @@ def main(argv: list[str]) -> int:
         assert len(kind_diff_problems("records", rows)[0]) == 2
         assert len(kind_diff_problems("work", rows)[1]) == 1 and not kind_diff_problems("work", rows)[0]
         assert kind_diff_problems("machine", rows) == ([], [])
+        assert oracle_problem("Oracle: outside html5lib tests") is None
+        assert oracle_problem("x\nOracle: graded tests/grades.csv\n") is None
+        assert oracle_problem("Oracle: built") and oracle_problem("Oracle: outside") and oracle_problem("no line")
         print("Self-test passed.")
         return 0
     base = argv[argv.index("--base") + 1] if "--base" in argv else "origin/main"
     kind_fails, kind_warns = check_kind(base)
     problems = (check_owner() + check_decisions(base) + check_kit() + check_one_place(base) + check_finance(base)
-                + kind_fails + check_roles() + check_handoff())
+                + kind_fails + check_roles() + check_handoff() + check_oracle())
     for w in check_core_assets(base) + kind_warns:
         print(f"::warning::{w}")
         print(f"Warning: {w}")
