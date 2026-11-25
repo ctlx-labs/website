@@ -25,6 +25,11 @@ Fails when:
 11. The repository has specs/README.md without an "Oracle: outside <reference>" or "Oracle: graded <file>" line
     ("Oracle: built" alone fails). Same wording as gate 1.6e in ctlx-labs/myralphloop check_process.py, enforced by
     loop.sh since 19 Nov; this extends it to builds outside myralphloop (review 24 Nov, ctlx-labs/firm PR #188).
+12. Two decision files share a number (decisions/NNNN-*.md), or the branch adds a decision whose number the base
+    (origin/main) already holds under another name. Parallel branches claimed 0044 and 0045 twice on 24 Nov 2026
+    (ctlx-labs/firm #217); take the next free number after merging main.
+13. Two rows of ops/purchases.csv share an id, or the branch adds an id (absent at the merge base) that the base
+    (origin/main) already holds. Parallel branches claimed P19 and P32 twice on 24 Nov 2026; same shape as rule 12.
 Warns (does not fail) when:
 4. The branch adds a file that looks like a new copy of a core asset, outside the asset's home and with no recorded
    exception (.claude/core-assets.json; ctlx-labs/firm catalog/CORE-ASSETS.md; FIRM.md B17).
@@ -88,6 +93,77 @@ def check_decisions(base: str) -> list[str]:
         if strip(old.stdout) != strip(new):
             out.append(f"{name}: accepted decision changed. Write a new decision that supersedes it.")
     return out
+
+
+DECISION_FILE = re.compile(r"(^|/)decisions/(\d{4})-[^/]+\.md$")
+
+
+def decision_number_problems(tree: list[str], added: list[str], base_tree: list[str]) -> list[str]:
+    """Rule 12: no two decisions share a number; a decision added here does not reuse a number the base holds."""
+    def numbers(names):
+        by = {}
+        for n in names:
+            m = DECISION_FILE.search(n)
+            if m:
+                by.setdefault((n[:m.start(2)], m.group(2)), []).append(n)
+        return by
+    out = []
+    for (_, num), names in sorted(numbers(tree).items()):
+        if len(names) > 1:
+            out.append(f"decision number {num} is used by {len(names)} files: {', '.join(sorted(names))}. "
+                       "Renumber the newer one to the next free number.")
+    on_base = numbers(base_tree)
+    for n in added:
+        m = DECISION_FILE.search(n)
+        if not m:
+            continue
+        taken = [b for b in on_base.get((n[:m.start(2)], m.group(2)), []) if b != n]
+        if taken:
+            out.append(f"{n}: number {m.group(2)} is already taken on the base by {taken[0]}. "
+                       "Merge the base and take the next free number.")
+    return out
+
+
+def check_decision_numbers(base: str) -> list[str]:
+    def git(*args):
+        r = subprocess.run(["git", *args], cwd=ROOT, capture_output=True, text=True)
+        return r.stdout.split("\n") if r.returncode == 0 else []
+    tree = [n for n in git("ls-files") if n]
+    added = [n for n in git("diff", "--name-only", "--diff-filter=A", f"{base}...HEAD") if n]
+    base_tree = [n for n in git("ls-tree", "-r", "--name-only", base) if n]
+    return decision_number_problems(tree, added, base_tree)
+
+
+PURCHASES = "ops/purchases.csv"
+
+
+def purchase_ids(text: str) -> list[str]:
+    import csv
+    import io
+    rows = list(csv.DictReader(io.StringIO(text or "")))
+    return [(r.get("id") or "").strip() for r in rows if (r.get("id") or "").strip()]
+
+
+def purchase_id_problems(head: str, fork: str, base: str) -> list[str]:
+    """Rule 13: ids in ops/purchases.csv are unique, and a branch does not add an id the base already holds."""
+    ids = purchase_ids(head)
+    out = [f"{PURCHASES}: id {i} is used by {ids.count(i)} rows. Give the newer row the next free id."
+           for i in sorted({i for i in ids if ids.count(i) > 1})]
+    added = set(ids) - set(purchase_ids(fork))
+    for i in sorted(added & set(purchase_ids(base))):
+        out.append(f"{PURCHASES}: id {i} is added on this branch but the base already holds it. "
+                   "Merge the base and take the next free id.")
+    return out
+
+
+def check_purchase_ids(base: str) -> list[str]:
+    if not (ROOT / PURCHASES).exists():
+        return []
+    def show(ref):
+        r = subprocess.run(["git", "show", f"{ref}:{PURCHASES}"], cwd=ROOT, capture_output=True, text=True)
+        return r.stdout if r.returncode == 0 else ""
+    mb = subprocess.run(["git", "merge-base", base, "HEAD"], cwd=ROOT, capture_output=True, text=True).stdout.strip()
+    return purchase_id_problems((ROOT / PURCHASES).read_text(), show(mb) if mb else "", show(base))
 
 
 def check_kit() -> list[str]:
@@ -364,12 +440,25 @@ def main(argv: list[str]) -> int:
         assert oracle_problem("Oracle: outside html5lib tests") is None
         assert oracle_problem("x\nOracle: graded tests/grades.csv\n") is None
         assert oracle_problem("Oracle: built") and oracle_problem("Oracle: outside") and oracle_problem("no line")
+        t = ["decisions/0044-a.md", "decisions/0045-b.md", "decisions/0045-c.md", "decisions/README.md"]
+        assert len(decision_number_problems(t, [], [])) == 1
+        assert not decision_number_problems(t[:2], ["decisions/0045-b.md"], t[:1])
+        assert len(decision_number_problems(["decisions/0045-b.md"], ["decisions/0045-b.md"],
+                                            ["decisions/0045-x.md"])) == 1
+        assert not decision_number_problems(["specs/decisions/0001-a.md", "decisions/0001-b.md"], [], [])
+        h = "id,item\nP01,a\nP02,b\nP02,c\n"
+        assert len(purchase_id_problems(h, "", "")) == 1
+        assert not purchase_id_problems("id,item\nP01,a\nP02,b2\n", "id,item\nP01,a\nP02,b\n",
+                                        "id,item\nP01,a\nP02,b\nP03,x\n")
+        assert len(purchase_id_problems("id,item\nP01,a\nP03,y\n", "id,item\nP01,a\n",
+                                        "id,item\nP01,a\nP03,x\n")) == 1
         print("Self-test passed.")
         return 0
     base = argv[argv.index("--base") + 1] if "--base" in argv else "origin/main"
     kind_fails, kind_warns = check_kind(base)
     problems = (check_owner() + check_decisions(base) + check_kit() + check_one_place(base) + check_finance(base)
-                + kind_fails + check_roles() + check_handoff() + check_oracle())
+                + kind_fails + check_roles() + check_handoff() + check_oracle() + check_decision_numbers(base)
+                + check_purchase_ids(base))
     for w in check_core_assets(base) + kind_warns:
         print(f"::warning::{w}")
         print(f"Warning: {w}")

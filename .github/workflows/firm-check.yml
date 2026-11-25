@@ -21,3 +21,11 @@ jobs:
         run: python3 .claude/checks/firm_check.py --base origin/${{ github.base_ref || 'main' }}
       - name: Hook self-test (agent_rules.py)
         run: "[ ! -f .claude/hooks/agent_rules.py ] || python3 .claude/hooks/agent_rules.py --self-test"
+      - name: Hook self-test (protect_records.py)
+        run: "[ ! -f .claude/hooks/protect_records.py ] || ! grep -q -- --self-test .claude/hooks/protect_records.py || python3 .claude/hooks/protect_records.py --self-test"
+      - name: Secret scan of this PR's commits (gitleaks, MIT; radar trial)
+        run: |
+          curl -sSfL https://github.com/gitleaks/gitleaks/releases/download/v8.21.2/gitleaks_8.21.2_linux_x64.tar.gz \
+            | tar -xz -C /tmp gitleaks
+          /tmp/gitleaks detect --source . --redact --no-banner \
+            --log-opts="origin/${{ github.base_ref || 'main' }}..HEAD"

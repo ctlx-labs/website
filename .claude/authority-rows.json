@@ -1,0 +1,23 @@
+{
+  "_source": "ctlx-labs/firm governance/AUTHORITY.md, rows whose 'Who decides' names Ali",
+  "ali": [
+    "Issue an IC memo",
+    "Issue a funder dossier, or any figures to a funder or lender",
+    "Send offers, terms or anything binding to a counterparty",
+    "Give regulated advice",
+    "Send client data to a third party",
+    "Merge a PR touching a file Ali owns (issued/, SENDS.md, rendered .docx/.pdf, deal-kit mandate/, CODEOWNERS)",
+    "Create a repository",
+    "Archive a repository",
+    "Rename a repository",
+    "Delete a repository",
+    "Change a repository's visibility",
+    "Add kit (set a radar ring)",
+    "Take a one-way door",
+    "Set an investment policy value",
+    "Spend above a line's weekly budget, or make any other payment",
+    "Act in Ali's signed-in browser",
+    "Accept an answer key (capture a golden master)",
+    "Decide a verdict, or act on it (thesis machine)"
+  ]
+}
