@@ -30,6 +30,11 @@ Fails when:
     (ctlx-labs/firm #217); take the next free number after merging main.
 13. Two rows of ops/purchases.csv share an id, or the branch adds an id (absent at the merge base) that the base
     (origin/main) already holds. Parallel branches claimed P19 and P32 twice on 24 Nov 2026; same shape as rule 12.
+14. A YAML (.yaml, .yml) or JSON (.json) file that the branch adds or changes does not parse. Invalid YAML merged
+    in thesis-esco on 25 Nov (tiers.yaml v0.4, design/investor_profiles.yaml) because no check read it. Unknown YAML
+    tags are accepted. Skipped: JSON-with-comments files (tsconfig*.json, jsconfig*.json, .vscode/, .devcontainer/) and
+    vendored or fixture folders (node_modules, vendor, external, test(s), fixture(s)). Unchanged files that do not
+    parse are warnings.
 Warns (does not fail) when:
 4. The branch adds a file that looks like a new copy of a core asset, outside the asset's home and with no recorded
    exception (.claude/core-assets.json; ctlx-labs/firm catalog/CORE-ASSETS.md; FIRM.md B17).
@@ -408,6 +413,54 @@ def check_oracle() -> list[str]:
     return [p] if p else []
 
 
+JSONC = ("tsconfig*.json", "jsconfig*.json", "*.jsonc")
+# Vendored or deliberately broken files: third-party packages, outside oracle suites, test fixtures.
+PARSE_SKIP_DIRS = {"node_modules", "vendor", "external", "test", "tests", "fixture", "fixtures", ".vscode",
+                   ".devcontainer"}
+
+
+def parse_problem(path: str, text: str) -> str | None:
+    """Why the YAML or JSON text does not parse, or None when it does (or the file is neither)."""
+    if (any(fnmatch.fnmatch(Path(path).name, g) for g in JSONC)
+            or PARSE_SKIP_DIRS.intersection(Path(path).parts[:-1])):
+        return None
+    try:
+        if path.endswith(".json"):
+            json.loads(text)
+        elif path.endswith((".yaml", ".yml")):
+            import yaml
+
+            class Loader(yaml.SafeLoader):
+                pass
+            Loader.add_multi_constructor("", lambda loader, suffix, node: None)
+            list(yaml.load_all(text, Loader=Loader))
+        return None
+    except ImportError:
+        return "PyYAML is not installed; the workflow installs it (pip install pyyaml)"
+    except Exception as e:  # noqa: BLE001 - any parse error is the finding
+        return " ".join(str(e).split())[:300]
+
+
+def _git(*args: str) -> str:
+    r = subprocess.run(["git", *args], cwd=ROOT, capture_output=True, text=True)
+    return r.stdout if r.returncode == 0 else ""
+
+
+def check_parse(base: str) -> tuple[list[str], list[str]]:
+    """Rule 14: changed YAML and JSON files parse (fail); other tracked ones that do not are warnings."""
+    changed = set(_git("diff", "--name-only", "--diff-filter=AMR", f"{base}...HEAD").split())
+    fails, warns = [], []
+    for path in _git("ls-files", "*.yaml", "*.yml", "*.json").split("\n"):
+        if not path or not (ROOT / path).is_file():
+            continue
+        why = parse_problem(path, (ROOT / path).read_text(errors="replace"))
+        if why:
+            (fails if path in changed else warns).append(f"{path} does not parse (rule 14): {why}")
+    if len(warns) > 10:
+        warns = warns[:10] + [f"{len(warns) - 10} more YAML or JSON files do not parse (rule 14)"]
+    return fails, warns
+
+
 def main(argv: list[str]) -> int:
     if "--self-test" in argv:
         bad = ["One email to eInforma would settle it.", "You could ask them for the filing.",
@@ -452,14 +505,20 @@ def main(argv: list[str]) -> int:
                                         "id,item\nP01,a\nP02,b\nP03,x\n")
         assert len(purchase_id_problems("id,item\nP01,a\nP03,y\n", "id,item\nP01,a\n",
                                         "id,item\nP01,a\nP03,x\n")) == 1
+        assert parse_problem("a.yaml", "a: 1\n---\nb: !Ref x\n") is None
+        assert parse_problem("a.yaml", "a: [1, 2\nb: 3\n")
+        assert parse_problem("a.json", '{"a": 1,}') and parse_problem("x.json", '{"a": 1}') is None
+        assert parse_problem("p/tests/inputs/bad.json", "x") is None and parse_problem("x/node_modules/a.json", "x") is None
+        assert parse_problem("tsconfig.json", "{// c\n}") is None and parse_problem("README.md", "{") is None
         print("Self-test passed.")
         return 0
     base = argv[argv.index("--base") + 1] if "--base" in argv else "origin/main"
     kind_fails, kind_warns = check_kind(base)
+    parse_fails, parse_warns = check_parse(base)
     problems = (check_owner() + check_decisions(base) + check_kit() + check_one_place(base) + check_finance(base)
                 + kind_fails + check_roles() + check_handoff() + check_oracle() + check_decision_numbers(base)
-                + check_purchase_ids(base))
-    for w in check_core_assets(base) + kind_warns:
+                + check_purchase_ids(base) + parse_fails)
+    for w in check_core_assets(base) + kind_warns + parse_warns:
         print(f"::warning::{w}")
         print(f"Warning: {w}")
     if problems:

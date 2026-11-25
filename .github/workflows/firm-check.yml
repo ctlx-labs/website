@@ -16,11 +16,15 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+      - name: YAML parser for rule 14 (PyYAML, MIT)
+        run: python3 -c "import yaml" 2>/dev/null || python3 -m pip install --quiet pyyaml
       - env:
           PR_BODY: ${{ github.event.pull_request.body }}
         run: python3 .claude/checks/firm_check.py --base origin/${{ github.base_ref || 'main' }}
       - name: Hook self-test (agent_rules.py)
         run: "[ ! -f .claude/hooks/agent_rules.py ] || python3 .claude/hooks/agent_rules.py --self-test"
+      - name: Hook self-test (key_guard.py)
+        run: "[ ! -f .claude/hooks/key_guard.py ] || python3 .claude/hooks/key_guard.py --self-test"
       - name: Hook self-test (protect_records.py)
         run: "[ ! -f .claude/hooks/protect_records.py ] || ! grep -q -- --self-test .claude/hooks/protect_records.py || python3 .claude/hooks/protect_records.py --self-test"
       - name: Secret scan of this PR's commits (gitleaks, MIT; radar trial)
