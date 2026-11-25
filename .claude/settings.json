@@ -3,6 +3,8 @@
     "allow": [
       "Bash(git push:*)",
       "Bash(gh pr merge:*)",
+      "Bash(gh repo deploy-key add:*)",
+      "Bash(gh secret set:*)",
       "Bash(npm run:*)",
       "Bash(python3:*)"
     ],
