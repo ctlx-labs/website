@@ -38,6 +38,16 @@
         ]
       },
       {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/key_guard.py\"",
+            "timeout": 30
+          }
+        ]
+      },
+      {
         "matcher": "mcp__hearthbot__post_message|mcp__hearthbot__request_decision|mcp__slackbot__post_message|mcp__slackbot__reply",
         "hooks": [
           {
