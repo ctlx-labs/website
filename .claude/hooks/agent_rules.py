@@ -12,6 +12,9 @@ mcp__slackbot__post_message, mcp__slackbot__reply):
        "Who decides" names Ali. "AUTHORITY: n/a" does not count.
      - A decision card that repeats one still open in this session (same question, not closed with close_decision)
        is refused: ask once.
+     - A decision card for a step that runs on the Mac (Remote Control, Keychain, "your Mac") is refused: the Mac
+       session accepts only Ali's own typed words, so a tap would not reach it and he would be asked twice (Ali, 25 Nov:
+       "it aggravates me"; ctlx-labs/firm#250). Ask once in a post_message that quotes the exact words to type.
   B. Each sentence that claims done, merged, green, passed, fixed, verified, live, closed (and the other status words
      below) carries a link in that sentence or the next one, or says "not verified". One link no longer clears a
      whole reply.
@@ -70,6 +73,8 @@ FUTURE = re.compile(r"^\W*(?:(?:next|then|now|after that|meanwhile|tomorrow|late
                     r"let me)\b", re.IGNORECASE)
 WAITS_ON_ALI = re.compile(r"\b(once|when|after|if|as soon as) you\b|\byour (reply|answer|choice|go|yes)\b",
                           re.IGNORECASE)
+MAC_STEP = re.compile(r"\b(?:the|your|his|Ali's|on|from|via)\s+Mac\b|\bRemote Control\b|\bKeychain\b|"
+                      r"\bmacOS dialog\b", re.IGNORECASE)
 SCOPE_NO_CHANGE = re.compile(r"scope:\s*no change", re.IGNORECASE)
 
 
@@ -269,6 +274,11 @@ def check_reply(tool: str, ti: dict, path: str = "", rows: list[str] | None = No
         text = " ".join(str(ti.get(k, "")) for k in ("question", "reason", "context"))
         text += " " + " ".join(str(o.get("consequence", "")) + " " + str(o.get("label", ""))
                                for o in ti.get("options") or [] if isinstance(o, dict))
+        if MAC_STEP.search(text):
+            return ("Blocked by the firm's agent rules (ctlx-labs/firm#250): this decision card asks for a step on the "
+                    "Mac, but the Mac session accepts only Ali's own typed words, so a tap would not reach it and he "
+                    "would be asked twice. Ask once in a post_message that names the AUTHORITY row and quotes the "
+                    "exact words for him to type, e.g. reply: **yes, run the key inventory**.")
         ok, cited = cites_row(text, rows)
         if not ok:
             return ask_reason("decision card", str(ti.get("question", "")), cited)
@@ -449,6 +459,13 @@ def self_test() -> int:
     assert denied(card(q))
     q["reason"] = "AUTHORITY: Create a repository (scope)."
     assert not denied(card(q))
+    # A. a step on the Mac is asked in words, never by card (firm#250)
+    mac = {"question": "Allow a read-only inventory of ctlx-labs deploy keys and secrets from your Mac?",
+           "reason": "AUTHORITY: Create a repository (scope).", "options": [{"label": "Yes", "consequence": "x"}],
+           "recommended": 0}
+    assert denied(card(mac))
+    assert denied(card(dict(mac, question="Run the sweep through Remote Control?")))
+    assert not denied(card(dict(mac, question="Machine learning model: keep the baseline?")))
     # A. handoffs without a "?"
     assert denied(post("Firm, step: token. Please add ONE_ENGINE_TOKEN in the baghara secrets and reply added."))
     assert denied(post("Firm, step: Mac.\nRun `brew install gitleaks` on the Mac."))
