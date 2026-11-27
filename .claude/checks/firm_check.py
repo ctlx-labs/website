@@ -35,6 +35,17 @@ Fails when:
     tags are accepted. Skipped: JSON-with-comments files (tsconfig*.json, jsconfig*.json, .vscode/, .devcontainer/) and
     vendored or fixture folders (node_modules, vendor, external, test(s), fixture(s)). Unchanged files that do not
     parse are warnings.
+15. The branch changes a stamped file (the hooks agent_rules.py, protect_records.py and key_guard.py, this check,
+    its workflow, solved.py, core-assets.json) and the pull request body carries no line
+    "Stamp: ctlx-labs/claude@<commit>". A stamped file has one source, ctlx-labs/claude settings/firm/: change it
+    there and stamp it. On 27 Nov 2026 two pull requests added checks D and E to the copy of agent_rules.py in
+    ctlx-labs/firm; the source and every other repository never received them, and the next stamp would have
+    removed them (ctlx-labs/firm#296). Without a pull request body (a local run) it is a warning.
+16. In ctlx-labs/firm, the rules registry fails its own check (`ops/tools/rules_registry.py --base <base>`): a
+    duplicate clause, a limit declared twice, a citation of a superseded decision, a sheet over its word limit,
+    `policies/AGENT-RULES.md` differing from the text generated from `policies/rules.yaml`, or a new rule that
+    names nothing it supersedes or extends (decision 0042 points 2 and 3; AGENT-RULES 6.3; Ali, 27 Nov: "a pile
+    of cross instructions that dont make sense to the agent that needs to use it").
 Warns (does not fail) when:
 4. The branch adds a file that looks like a new copy of a core asset, outside the asset's home and with no recorded
    exception (.claude/core-assets.json; ctlx-labs/firm catalog/CORE-ASSETS.md; FIRM.md B17).
@@ -461,6 +472,40 @@ def check_parse(base: str) -> tuple[list[str], list[str]]:
     return fails, warns
 
 
+STAMPED = (".claude/hooks/agent_rules.py", ".claude/hooks/protect_records.py", ".claude/hooks/key_guard.py",
+           ".claude/checks/firm_check.py", ".github/workflows/firm-check.yml", ".claude/tools/solved.py",
+           ".claude/core-assets.json")
+STAMP_LINE = re.compile(r"^\W*Stamp:\s*ctlx-labs/claude@[0-9a-f]{7,40}\b", re.MULTILINE)
+
+
+def stamp_problems(changed: list[str], body: str | None) -> tuple[list[str], list[str]]:
+    """Rule 15: a stamped file changes only by a stamp. Returns (fails, warnings)."""
+    hits = [n for n in changed if n in STAMPED]
+    if not hits or (body and STAMP_LINE.search(body)):
+        return [], []
+    msg = (f"{', '.join(hits)}: stamped from ctlx-labs/claude settings/firm/ (rule 15). Change the source there and "
+           "stamp it (scripts/stamp_settings.py), then put the line it prints, 'Stamp: ctlx-labs/claude@<commit>', "
+           "in the pull request body. A change made only in this copy is lost at the next stamp.")
+    return ([msg], []) if body is not None else ([], [msg])
+
+
+def check_stamped(base: str) -> tuple[list[str], list[str]]:
+    changed = _git("diff", "--name-only", "--diff-filter=AMDR", f"{base}...HEAD").split()
+    return stamp_problems(changed, os.environ.get("PR_BODY"))
+
+
+def check_rules_registry(base: str) -> list[str]:
+    """Rule 16: in ctlx-labs/firm, the rules registry is sound and the stamped sheet is generated from it."""
+    tool = ROOT / "ops" / "tools" / "rules_registry.py"
+    if repo_name() != "firm" or not tool.exists():
+        return []
+    r = subprocess.run([sys.executable, str(tool), "--base", base], cwd=ROOT, capture_output=True, text=True)
+    if r.returncode == 0:
+        return []
+    found = [line.strip()[2:] for line in r.stdout.splitlines() if line.strip().startswith("- ")]
+    return [f"rules registry (rule 16): {f}" for f in found or [(r.stderr or r.stdout).strip()[-300:]]]
+
+
 def main(argv: list[str]) -> int:
     if "--self-test" in argv:
         bad = ["One email to eInforma would settle it.", "You could ask them for the filing.",
@@ -510,15 +555,21 @@ def main(argv: list[str]) -> int:
         assert parse_problem("a.json", '{"a": 1,}') and parse_problem("x.json", '{"a": 1}') is None
         assert parse_problem("p/tests/inputs/bad.json", "x") is None and parse_problem("x/node_modules/a.json", "x") is None
         assert parse_problem("tsconfig.json", "{// c\n}") is None and parse_problem("README.md", "{") is None
+        hook = [".claude/hooks/agent_rules.py", "README.md"]
+        assert stamp_problems(hook, "Adds check E to the hook.")[0] and not stamp_problems(hook, "x")[1]
+        assert stamp_problems(hook, None) == ([], stamp_problems(hook, "")[0])
+        assert stamp_problems(hook, "Stamp of the firm settings.\nStamp: ctlx-labs/claude@53fd1b5\n") == ([], [])
+        assert stamp_problems(["README.md", "settings/firm/hooks/agent_rules.py"], "") == ([], [])
         print("Self-test passed.")
         return 0
     base = argv[argv.index("--base") + 1] if "--base" in argv else "origin/main"
     kind_fails, kind_warns = check_kind(base)
     parse_fails, parse_warns = check_parse(base)
+    stamp_fails, stamp_warns = check_stamped(base)
     problems = (check_owner() + check_decisions(base) + check_kit() + check_one_place(base) + check_finance(base)
                 + kind_fails + check_roles() + check_handoff() + check_oracle() + check_decision_numbers(base)
-                + check_purchase_ids(base) + parse_fails)
-    for w in check_core_assets(base) + kind_warns + parse_warns:
+                + check_purchase_ids(base) + parse_fails + stamp_fails + check_rules_registry(base))
+    for w in check_core_assets(base) + kind_warns + parse_warns + stamp_warns:
         print(f"::warning::{w}")
         print(f"Warning: {w}")
     if problems:
