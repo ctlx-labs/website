@@ -13,6 +13,8 @@
     "Rename a repository",
     "Delete a repository",
     "Change a repository's visibility",
+    "Add or replace any other CI secret on a ctlx-labs repository (a token, an API key)",
+    "Add a write deploy key, change a collaborator's or team's permission, or change any other repository or organisation setting",
     "Add kit (set a radar ring)",
     "Take a one-way door",
     "Set an investment policy value",
