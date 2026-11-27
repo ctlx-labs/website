@@ -15,6 +15,9 @@ mcp__slackbot__post_message, mcp__slackbot__reply):
      - A decision card for a step that runs on the Mac (Remote Control, Keychain, "your Mac") is refused: the Mac
        session accepts only Ali's own typed words, so a tap would not reach it and he would be asked twice (Ali, 25 Nov:
        "it aggravates me"; ctlx-labs/firm#250). Ask once in a post_message that quotes the exact words to type.
+     - A decision card about a merge is refused unless it cites the row "Merge a PR touching a file Ali owns": agents
+       merge green PRs that touch no file of his (Ali, 27 Nov: "why do you ask me to approve a card of merging...?";
+       ctlx-labs/firm#322).
   B. Each sentence that claims done, merged, green, passed, fixed, verified, live, closed (and the other status words
      below) carries a link in that sentence or the next one, or says "not verified". One link no longer clears a
      whole reply.
@@ -96,6 +99,9 @@ STOPPED = re.compile(r"\b(not public|no public|not (?:publicly )?(?:available|pu
 TRIED = re.compile(r"\b(?:routes? )?tried\s*:", re.IGNORECASE)
 MAC_STEP = re.compile(r"\b(?:the|your|his|Ali's|on|from|via)\s+Mac\b|\bRemote Control\b|\bKeychain\b|"
                       r"\bmacOS dialog\b", re.IGNORECASE)
+MERGE_ASK = re.compile(r"\bmerg\w*\b[^.?!\n]{0,40}(?:#\d+|\bPRs?\b|\bpull requests?\b)|"
+                       r"(?:#\d+|\bPRs?\b|\bpull requests?\b)[^.?!\n]{0,40}\bmerg\w*\b", re.IGNORECASE)
+OWNED_ROW = re.compile(r"\bAUTHORITY(?:\.md)?\b[^\n]{0,20}Merge a PR touching a file Ali owns", re.IGNORECASE)
 SCOPE_NO_CHANGE = re.compile(r"scope:\s*no change", re.IGNORECASE)
 ROWS_PATH = re.compile(r"(?:^|[\s\"'=(])((?:[\w.~/-]+/)?rows\.json)\b")
 BUILD_CLOSED = re.compile(r"\b(?:scope|build|queue|plan|structure|skeleton|frame|backlog)\b[^.!?\n]{0,60}?"
@@ -456,6 +462,12 @@ def check_reply(tool: str, ti: dict, path: str = "", rows: list[str] | None = No
                     "Mac, but the Mac session accepts only Ali's own typed words, so a tap would not reach it and he "
                     "would be asked twice. Ask once in a post_message that names the AUTHORITY row and quotes the "
                     "exact words for him to type, e.g. reply: **yes, run the key inventory**.")
+        if MERGE_ASK.search(text) and not OWNED_ROW.search(text):
+            return ("Blocked by the firm's agent rules (ctlx-labs/firm#322): this decision card asks Ali about a merge. "
+                    "Agents merge a PR that touches no file Ali owns once the firm check and tests are green "
+                    "(AUTHORITY: 'Merge a PR that touches no file Ali owns, in any repository', agent, auto). Merge it "
+                    "and tell him. Only a PR touching a file he owns (CODEOWNERS) waits for him: then cite 'AUTHORITY: "
+                    "Merge a PR touching a file Ali owns' and name the file.")
         ok, cited = cites_row(text, rows)
         if not ok:
             return ask_reason("decision card", str(ti.get("question", "")), cited)
@@ -604,6 +616,7 @@ def self_test() -> int:
         f.write("| Action | Who decides | How |\n|---|---|---|\n"
                 "| Create a repository | Ali (scope) | x |\n"
                 "| Change a repository's visibility | Ali (made public) | x |\n"
+                "| Merge a PR touching a file Ali owns (issued/, SENDS.md) | Ali (review) | x |\n"
                 "| Push a branch | agent | auto |\n")
     env = dict(os.environ, CLAUDE_PROJECT_DIR=d)
     env.pop("CLAUDE_CODE_REMOTE", None)
@@ -668,6 +681,15 @@ def self_test() -> int:
     assert denied(post("Firm, step: Mac.\nRun `brew install gitleaks` on the Mac."))
     assert not denied(post("Firm, step: Mac. Please add the secret.\nAUTHORITY: Create a repository (scope)"))
     assert not denied(post("Firm, step: hooks. Added the deny rules: https://github.com/x/y/pull/2"))
+    # A. a card about a merge is refused unless the PR touches a file Ali owns (firm#322)
+    mg = {"question": "Merge capital-gates #82 and then methods #374?",
+          "options": [{"label": "Merge both", "consequence": "I merge both."}, {"label": "Hold", "consequence": "Open."}],
+          "reason": "Both green. AUTHORITY: Create a repository (scope)"}
+    assert denied(card(mg))
+    assert not denied(card(dict(mg, reason="Touches issued/memo.md. AUTHORITY: Merge a PR touching a file Ali owns "
+                                           "(issued/, SENDS.md) (one-way door)")))
+    assert not denied(card({"question": "Merge the two ESCO repositories into one?",
+                            "reason": "AUTHORITY: Create a repository (scope)"}))
     # A. a card that repeats an open one
     p = transcript(("mcp__hearthbot__request_decision", {"question": "Create a new repository for ESCO?"}))
     assert denied(card(q, p))
