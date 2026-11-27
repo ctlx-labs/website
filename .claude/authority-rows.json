@@ -4,6 +4,7 @@
     "Issue an IC memo",
     "Issue a funder dossier, or any figures to a funder or lender",
     "Send offers, terms or anything binding to a counterparty",
+    "Any other contact with anyone outside the firm: a message, a call or a meeting (for example with a funder, a lender, a client, an expert, a supplier or a regulator)",
     "Give regulated advice",
     "Send client data to a third party",
     "Merge a PR touching a file Ali owns (issued/, SENDS.md, rendered .docx/.pdf, deal-kit mandate/, CODEOWNERS)",

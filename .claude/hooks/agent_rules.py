@@ -21,12 +21,29 @@ mcp__slackbot__post_message, mcp__slackbot__reply):
   S. Scope ledger (review action 19): once a session has read or written a SCOPE.md, a turn opened by a person's
      message reads that file and writes the new agreement to it before the first reply, or the reply says
      "Scope: no change".
+  D. Routes tried before a stop (decision 0030; Ali, 27 Nov: "this path is not something i can do ... can i still find
+     alternatives?"; firm #289). A sentence that reports a fact, source or item as unavailable or blocked ("not
+     public", "no published", "not found", "could not find", "no source", "blocked", "not available") is refused
+     unless the reply lists what was tried: a "Tried:" or "Routes tried:" list with three or more entries (bullets,
+     or items separated by ";"). A value with no exact source goes in as a range with a confidence label, not as a
+     stop.
+  E. Plan rows (decision 0048; firm #286). Once a session has read, written or checked a rows.json (the plan rows of a
+     scope: answer, structure or instance; ctlx-labs/methods guide/templates/check_rows.py), a reply that reports the
+     build, scope, plan, queue, structure or skeleton as finished, or says nothing waits on Ali, carries the two
+     report lines with the file's own counts: "Structure: complete yes|no (k of n rows done)" and "Calibration: x of
+     y inputs calibrated" (or "Calibration: no inputs marked"), plus "Rows open: ..." while any row is open. A "yes"
+     line carries the link to the check run (B).
 Stop:
   C. A turn that did work ends with a reply or a wake-up, and its last reply does not close on a promise ("Next I will
      ...") unless a wake-up is set in the same turn (Ali, 24 Nov: "a turn never ends on 'next I will'"). A promise
      that waits on Ali ("once you add the secret, I will ...") is allowed: his reply wakes the thread.
      In a project thread (the reply tools exist), both parts apply. In a Remote Control or other remote session with
      no reply tools, the last text of the turn is the reply, and only the promise part applies.
+  E. Plan rows (decision 0048; firm #286: a thread went idle with plan rows open). In a project thread whose
+     rows.json still holds an open row, a turn ends with a wake-up (set in this turn or still pending), or its last
+     reply names the rule that stops the build on a line starting "Stop rule:" (the budget, the kill rule, Ali). A
+     row closes as done with its evidence, or as blocked with three routes tried; a missing value never blocks a
+     structure row: it is recorded as a marked input (a range or a placeholder, with its owner).
 
 Fail safe: any error, an unreadable transcript, a missing field, or a second stop in a row (stop_hook_active) lets the
 action through, so a bug in this file can never stall a thread. Switch off for one session: CTLX_HOOKS_OFF=1.
@@ -73,9 +90,23 @@ FUTURE = re.compile(r"^\W*(?:(?:next|then|now|after that|meanwhile|tomorrow|late
                     r"let me)\b", re.IGNORECASE)
 WAITS_ON_ALI = re.compile(r"\b(once|when|after|if|as soon as) you\b|\byour (reply|answer|choice|go|yes)\b",
                           re.IGNORECASE)
+STOPPED = re.compile(r"\b(not public|no public|not (?:publicly )?(?:available|published)|no published|not found|"
+                     r"(?:could ?n[o']t|cannot|can't|unable to) (?:find|get|reach|access|obtain|source)|no source|"
+                     r"not in any source|(?:is|are|stays?|remains?) blocked|unavailable)\b", re.IGNORECASE)
+TRIED = re.compile(r"\b(?:routes? )?tried\s*:", re.IGNORECASE)
 MAC_STEP = re.compile(r"\b(?:the|your|his|Ali's|on|from|via)\s+Mac\b|\bRemote Control\b|\bKeychain\b|"
                       r"\bmacOS dialog\b", re.IGNORECASE)
 SCOPE_NO_CHANGE = re.compile(r"scope:\s*no change", re.IGNORECASE)
+ROWS_PATH = re.compile(r"(?:^|[\s\"'=(])((?:[\w.~/-]+/)?rows\.json)\b")
+BUILD_CLOSED = re.compile(r"\b(?:scope|build|queue|plan|structure|skeleton|frame|backlog)\b[^.!?\n]{0,60}?"
+                          r"\b(?P<w>finished|complete|completed|built|done)\b", re.IGNORECASE)
+NOTHING_LEFT = re.compile(r"\bnothing (?:(?:is )?(?:waits|waiting) on|needs|left for|remains for) you\b", re.IGNORECASE)
+STRUCTURE_LINE = re.compile(r"^\W*Structure:\s*complete\s+(yes|no)\b[^\n]*?(\d+)\s+of\s+(\d+)",
+                            re.IGNORECASE | re.MULTILINE)
+CALIBRATION_LINE = re.compile(r"^\W*Calibration:\s*(?:(\d+)\s+of\s+(\d+)\s+inputs?\s+calibrated|(no inputs marked))",
+                              re.IGNORECASE | re.MULTILINE)
+OPEN_LINE = re.compile(r"^\W*Rows open:\s*\S", re.IGNORECASE | re.MULTILINE)
+STOP_RULE = re.compile(r"^\W*Stop rule:\s*\S", re.IGNORECASE | re.MULTILINE)
 
 
 # ---- text helpers ----------------------------------------------------------------------------------------------
@@ -118,6 +149,36 @@ def unproven_claims(text: str) -> list[str]:
                     out.append(s.strip())
                     break
     return out
+
+
+def routes_tried(text: str) -> int:
+    """Entries in the reply's 'Tried:' list: bullets on the lines after it, or items separated by ';' on its line."""
+    best = 0
+    lines = text.splitlines()
+    for i, ln in enumerate(lines):
+        m = TRIED.search(ln)
+        if not m:
+            continue
+        inline = [x for x in re.split(r";", ln[m.end():]) if x.strip()]
+        bullets = 0
+        for nxt in lines[i + 1:]:
+            if re.match(r"^\s*(?:[-*\u2022]|\d+[.)])\s+\S", nxt):
+                bullets += 1
+            elif nxt.strip():
+                break
+        best = max(best, len(inline), bullets)
+    return best
+
+
+def stops_without_routes(text: str) -> str | None:
+    """The first sentence that reports something unavailable, if the reply lists fewer than three routes tried."""
+    if routes_tried(text) >= 3:
+        return None
+    for line in sentences(strip_quotes(text)):
+        for s in line:
+            if STOPPED.search(s):
+                return s.strip()
+    return None
 
 
 def closes_on_promise(text: str) -> str | None:
@@ -256,6 +317,122 @@ def scope_file(calls: list[dict]) -> str | None:
     return found
 
 
+def rows_file(calls: list[dict], cwd: str = "") -> str | None:
+    """The rows.json this session last read, wrote or checked, if it exists on disk."""
+    found = None
+    for c in calls:
+        ti = c.get("input") or {}
+        p = str(ti.get("file_path") or "")
+        if os.path.basename(p) == "rows.json":
+            found = p
+        elif c.get("name") == "Bash":
+            m = ROWS_PATH.search(str(ti.get("command", "")))
+            if m:
+                found = m.group(1)
+    if found and not os.path.isabs(found):
+        found = os.path.join(cwd or os.getcwd(), found)
+    return found if found and os.path.isfile(found) else None
+
+
+def rows_state(path: str | None) -> dict | None:
+    """Counts from a rows.json. The full check is ctlx-labs/methods guide/templates/check_rows.py."""
+    if not path:
+        return None
+    with open(path, encoding="utf-8") as f:
+        doc = json.load(f)
+    rows = [r for r in (doc.get("rows") or []) if isinstance(r, dict)] if isinstance(doc, dict) else []
+    if not rows:
+        return None
+    inputs = [i for i in (doc.get("inputs") or []) if isinstance(i, dict)]
+    structure = [r for r in rows if r.get("kind") == "structure"]
+    real = lambda v: v not in (None, "", [], {}) and not str(v).strip().startswith("<")
+    return {"path": path,
+            "open": [str(r.get("id")) for r in rows if r.get("status") not in ("done", "blocked")],
+            "structure": len(structure), "structure_done": sum(1 for r in structure if r.get("status") == "done"),
+            "inputs": len(inputs),
+            "calibrated": sum(1 for i in inputs if real(i.get("value")) and real(i.get("source"))
+                              and not i.get("placeholder"))}
+
+
+def report_lines(state: dict) -> str:
+    out = []
+    if state["structure"]:
+        yes = state["structure_done"] == state["structure"]
+        out.append(f"Structure: complete {'yes' if yes else 'no'} "
+                   f"({state['structure_done']} of {state['structure']} rows done)")
+    out.append(f"Calibration: {state['calibrated']} of {state['inputs']} inputs calibrated" if state["inputs"]
+               else "Calibration: no inputs marked")
+    if state["open"]:
+        out.append("Rows open: " + ", ".join(state["open"]))
+    return "\n".join(out)
+
+
+def closes_build(text: str) -> str | None:
+    """The first sentence that reports the build as finished, or says nothing waits on Ali."""
+    for line in sentences(strip_quotes(text)):
+        for s in line:
+            if re.match(r"^\W*(Structure|Calibration|Rows open|Stop rule):", s, re.IGNORECASE):
+                continue
+            m = BUILD_CLOSED.search(s)
+            if NOTHING_LEFT.search(s) or (m and not NEGATED.search(s[:m.start("w")])):
+                return s.strip()
+    return None
+
+
+def report_reason(text: str, state: dict) -> str | None:
+    claim = closes_build(text)
+    if not claim:
+        return None
+    f, i = STRUCTURE_LINE.search(text), CALIBRATION_LINE.search(text)
+    ok = True
+    if state["structure"]:
+        yes = state["structure_done"] == state["structure"]
+        ok = bool(f) and (f.group(1).lower() == "yes") == yes and \
+            (int(f.group(2)), int(f.group(3))) == (state["structure_done"], state["structure"])
+    if state["inputs"]:
+        ok = ok and bool(i) and i.group(1) is not None and \
+            (int(i.group(1)), int(i.group(2))) == (state["calibrated"], state["inputs"])
+    else:
+        ok = ok and bool(i)
+    if state["open"]:
+        ok = ok and bool(OPEN_LINE.search(text))
+    if ok:
+        return None
+    return ("Blocked by the firm's agent rules (plan rows, decision 0048, firm #286): the sentence "
+            f"'{claim[:120]}' reports the build as finished or says nothing waits on Ali, and the reply does not carry "
+            f"the report lines with the counts of {state['path']}. Add these lines as they stand, and keep working on "
+            "any open row:\n" + report_lines(state))
+
+
+def wake_pending(entries: list[dict]) -> bool:
+    """A wake-up set in an earlier turn that is still ahead (best effort; a recurring schedule counts)."""
+    import datetime
+    now = datetime.datetime.now(datetime.timezone.utc)
+    for e in entries:
+        content = (e.get("message") or {}).get("content")
+        if e.get("type") != "assistant" or not isinstance(content, list):
+            continue
+        for b in content:
+            if not isinstance(b, dict) or b.get("type") != "tool_use" or b.get("name") not in WAKE_TOOLS:
+                continue
+            if b.get("name") in ("mcp__claude-code-remote__create_trigger", "CronCreate"):
+                return True
+            ti = b.get("input") or {}
+            try:
+                set_at = datetime.datetime.fromisoformat(str(e.get("timestamp", "")).replace("Z", "+00:00"))
+                if ti.get("at"):
+                    due = datetime.datetime.fromisoformat(str(ti["at"])[:16]).replace(tzinfo=datetime.timezone.utc)
+                    due += datetime.timedelta(hours=14)  # the zone is not resolved here: allow the widest offset
+                else:
+                    due = set_at + datetime.timedelta(minutes=float(ti.get("delay_minutes") or 0),
+                                                      seconds=float(ti.get("delaySeconds") or 0))
+            except (ValueError, TypeError):
+                continue
+            if due > now:
+                return True
+    return False
+
+
 # ---- checks ------------------------------------------------------------------------------------------------------
 
 def ask_reason(kind: str, sample: str, cited: str) -> str:
@@ -267,7 +444,7 @@ def ask_reason(kind: str, sample: str, cited: str) -> str:
             "No row of his: decide it yourself, log it, and tell him.")
 
 
-def check_reply(tool: str, ti: dict, path: str = "", rows: list[str] | None = None) -> str | None:
+def check_reply(tool: str, ti: dict, path: str = "", rows: list[str] | None = None, cwd: str = "") -> str | None:
     """Reason to deny, or None."""
     entries = load(path) if path and os.path.exists(path) else []
     if tool in QUESTION_TOOLS:
@@ -299,8 +476,16 @@ def check_reply(tool: str, ti: dict, path: str = "", rows: list[str] | None = No
         return ("Blocked by the firm's agent rules (no claim without proof): the sentence "
                 f"'{claims[0][:120]}' states a result or status with no link beside it. Put the link to the PR, "
                 "check run or file in that sentence, or write 'not verified' and name the check that would verify it.")
+    stop = stops_without_routes(text)
+    if stop:
+        return ("Blocked by the firm's agent rules (routes tried before a stop, decision 0030, firm #289): the sentence "
+                f"'{stop[:120]}' reports something unavailable, and the reply lists fewer than three routes tried. Try "
+                "at least three other routes (another source, a proxy measure, a range from observed cases, your own "
+                "tools), then add a 'Tried:' list with each route and what it returned; a value with no exact source "
+                "goes in as a range with a confidence label.")
     if entries:
-        reason = check_scope(entries, text)
+        state = rows_state(rows_file(all_tool_uses(entries), cwd))
+        reason = (report_reason(text, state) if state else None) or check_scope(entries, text)
         if reason:
             return reason
     return None
@@ -347,7 +532,8 @@ def check_stop(event: dict) -> str | None:
     thread = has_reply_tools(path)
     if not thread and not remote_session():
         return None
-    _, blocks = turn(load(path))
+    entries = load(path)
+    _, blocks = turn(entries)
     calls = [b for b in blocks if b.get("type") == "tool_use"]
     names = [c.get("name", "") for c in calls]
     woke = any(n in WAKE_TOOLS for n in names)
@@ -368,6 +554,17 @@ def check_stop(event: dict) -> str | None:
         return ("Blocked by the firm's agent rules (Ali, 24 Nov: a turn never ends on 'next I will'): the reply "
                 f"closes on '{promise[:100]}'. Do that step now, in this turn, or set a wake-up for it "
                 "(send_later, at most 45 minutes ahead).")
+    if thread and not woke and not STOP_RULE.search(last):
+        state = rows_state(rows_file(all_tool_uses(entries), event.get("cwd") or ""))
+        if state and state["open"] and not wake_pending(entries):
+            ids = ", ".join(state["open"][:12]) + (" and more" if len(state["open"]) > 12 else "")
+            return ("Blocked by the firm's agent rules (plan rows, decision 0048, firm #286: a thread never goes idle "
+                    f"with plan rows open): {state['path']} still holds {len(state['open'])} open row(s): {ids}. Carry "
+                    "on with the next open row now, or set a wake-up for it (send_later, at most 45 minutes ahead). A "
+                    "row closes as done with its evidence, or as blocked with three routes tried and what would "
+                    "unblock it. A missing value never blocks a structure row: record it as a marked input (a range or a "
+                    "placeholder, with its owner). If the budget, the kill rule or Ali stops the build, say which on "
+                    "a line starting 'Stop rule:'.")
     return None
 
 
@@ -382,7 +579,7 @@ def main() -> int:
             if tool not in REPLY_TOOLS:
                 return 0
             reason = check_reply(tool, event.get("tool_input") or {}, event.get("transcript_path") or "",
-                                 authority_rows())
+                                 authority_rows(), event.get("cwd") or "")
             if reason:
                 json.dump({"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny",
                                                   "permissionDecisionReason": reason}}, sys.stdout)
@@ -485,6 +682,15 @@ def self_test() -> int:
                        "The baghara secret is configured too."))
     assert denied(post("Firm, step: hooks. The rule is live on every repository."))
     assert not denied(post("Firm, step: hooks. Tests passed locally, not verified in CI (firm-check run)."))
+    # D. a stop names the routes tried (firm #289)
+    assert denied(post("Capital gates, step: oracle. The SH 130 cash flows are not public."))
+    assert denied(post("Capital gates, step: oracle. The figure is not available.\nTried: EMMA; the press"))
+    assert not denied(post("Capital gates, step: oracle. FEED is not in any source.\nTried: the thesis; IESE ST-0523; "
+                           "OPIC search; Sacyr page"))
+    assert not denied(post("Capital gates, step: oracle. No published series exists.\nRoutes tried:\n- EMMA (403)\n"
+                           "- toll-road statements\n- Searstone CCRC statement"))
+    assert not denied(post("Capital gates, step: oracle. Cover 1.31 against the 1.30 covenant: "
+                           "https://github.com/x/y/pull/3"))
     assert not denied(post("Firm, step: hooks. I will merge once the check is green."))
     assert not denied(post("Firm, step: hooks. Nothing is merged yet."))
     assert not denied(post("Firm, step: hooks. The [PR](https://github.com/x/y/pull/3) is merged."))
@@ -527,6 +733,45 @@ def self_test() -> int:
     assert blocked(stop(plain, e={"CLAUDE_CODE_REMOTE": "true"}))  # a remote session: the promise counts
     assert not stop(transcript("Bash", ("TEXT", "Tests pass: https://x.y/run/1"), opener="plain session"),
                     e={"CLAUDE_CODE_REMOTE": "true"})
+    # E. plan rows (decision 0048, firm #286)
+    rj = os.path.join(d, "rows.json")
+
+    def rows_json(*status, inputs=()):
+        with open(rj, "w") as f:
+            json.dump({"rows": [{"id": f"P{n}", "kind": "structure", "slice": "skeleton", "status": st} for n, st in enumerate(status, 1)],
+                       "inputs": list(inputs)}, f)
+
+    marked = [{"id": "cover_floor", "row": "P1", "range": [1.15, 2.0]}, {"id": "tenor", "row": "P1", "value": 15,
+                                                                           "source": "doc-1"}]
+    rows_json("done", "open", "open", inputs=marked)
+    seen = ("Read", {"file_path": rj})
+    msg = lambda t: ("mcp__hearthbot__post_message", {"text": t})
+    assert blocked(stop(transcript(seen, "Bash", msg("Firm, step: build. P1 passes: https://x.y/run/1"))))
+    assert blocked(stop(transcript(seen, msg("Firm, step: build. The answer is 15 years (doc-1)."))))  # no work, rows open
+    assert not stop(transcript(seen, "Bash", msg("Firm, step: build. P1 passes: https://x.y/run/1"),
+                               "mcp__claude-code-remote__send_later"))
+    assert not stop(transcript(seen, "Bash", msg("Firm, step: build. P1 passes: https://x.y/run/1\n"
+                                                 "Stop rule: budget, US$40 of US$40 spent (0038).")))
+    assert not stop(transcript(seen, "Bash", msg("x")), active=True)
+    assert blocked(stop(transcript(("Bash", {"command": f"python3 check_rows.py {rj} --closed"}), msg("Checked."))))
+    assert denied(post("Firm, step: build. The overnight queue is finished. Nothing waits on you.", transcript(seen)))
+    assert denied(post("Firm, step: build. The build is complete.\nStructure: complete yes (3 of 3 rows done)\n"
+                       "Calibration: 1 of 2 inputs calibrated", transcript(seen)))  # counts differ from the file
+    assert not denied(post("Firm, step: build. Nothing waits on you.\nStructure: complete no (1 of 3 rows done)\n"
+                           "Calibration: 1 of 2 inputs calibrated\nRows open: P2, P3", transcript(seen)))
+    assert not denied(post("Firm, step: build. The build is not finished: P2 and P3 are open.", transcript(seen)))
+    assert not denied(post("Firm, step: build. P1 passes its done test: https://x.y/run/1", transcript(seen)))
+    rows_json("done", "done", "blocked", inputs=marked)
+    assert not stop(transcript(seen, "Bash", msg("Firm, step: build. P2 passes: https://x.y/run/2")))  # no open row
+    assert denied(post("Firm, step: build. The structure is complete.", transcript(seen)))
+    assert denied(post("Firm, step: build. The walking skeleton is built.", transcript(seen)))
+    assert not denied(post("Firm, step: build. The structure is built, bar one blocked row.\n"
+                           "Structure: complete no (2 of 3 rows done; not done: P3)\n"
+                           "Calibration: 1 of 2 inputs calibrated; marked: cover_floor (1.15 to 2.0, medium, bank Y, ask)",
+                           transcript(seen)))
+    os.remove(rj)
+    assert not stop(transcript(seen, "Bash", msg("Firm, step: build. P1 passes: https://x.y/run/1")))  # file gone: skip
+    assert not denied(post("Firm, step: notes. The structure is built from three parts.", transcript("Bash")))  # no rows file
     # Fail safe: garbage in, nothing blocked.
     out = subprocess.run([sys.executable, __file__], input="not json", capture_output=True, text=True, env=env)
     assert out.returncode == 0 and not out.stdout.strip()
